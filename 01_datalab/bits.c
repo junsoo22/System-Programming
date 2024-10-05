@@ -2,6 +2,8 @@
  * CSE4009 Assignment 1 - Data Lab 
  * 
  * <Please put your name and userid here>
+name: Kim Junsoo(김준수)
+userid: 2022031994
  * 
  * bits.c - Source file with your solutions to the Lab.
  *          This is the file you will hand in to your instructor.
@@ -178,7 +180,10 @@ NOTES:
  *   Rating: 1
  */
 int bitXor(int x, int y) {
-  return 2;
+  //return x^y;
+  
+  //return (x & ~y) | (~x & y);      //일단 이정도, 대칭차집합
+	return ~(~(x & ~y) & ~(~x & y));
 }
 /* 
  * tmin - return minimum two's complement integer 
@@ -187,7 +192,7 @@ int bitXor(int x, int y) {
  *   Rating: 1
  */
 int tmin(void) {
-  return 2;
+	return 1<<31;
 }
 //2
 /*
@@ -198,7 +203,12 @@ int tmin(void) {
  *   Rating: 1
  */
 int isTmax(int x) {
-  return 2;
+
+	int t=x+1;
+	x=x + t;
+	x= ~x;
+	return !!t & !x;
+	
 }
 /* 
  * allOddBits - return 1 if all odd-numbered bits in word set to 1
@@ -209,7 +219,10 @@ int isTmax(int x) {
  *   Rating: 2
  */
 int allOddBits(int x) {
-  return 2;
+	int odd=0xAA | (0xAA<<8);
+	int odd2= odd | (odd<<16);
+	return !(odd2 ^ (x & odd2));
+	//return !(0xAAAAAAAA ^ (x & 0xAAAAAAAA));
 }
 /* 
  * negate - return -x 
@@ -219,7 +232,7 @@ int allOddBits(int x) {
  *   Rating: 2
  */
 int negate(int x) {
-  return 2;
+	return (~x+1);
 }
 //3
 /* 
@@ -232,7 +245,9 @@ int negate(int x) {
  *   Rating: 3
  */
 int isAsciiDigit(int x) {
-  return 2;
+ 	int min=x+(~0x30+1);     //x-0x30
+	int max=0x39+(~x+1);    //0x39-x
+	return !(min>>31) & !(max>>31);
 }
 /* 
  * conditional - same as x ? y : z 
@@ -242,7 +257,10 @@ int isAsciiDigit(int x) {
  *   Rating: 3
  */
 int conditional(int x, int y, int z) {
-  return 2;
+	int tmp=!!x;
+	tmp=~tmp+1;
+	//return tmp;
+	return (y & tmp) | (z & ~tmp);
 }
 /* 
  * isLessOrEqual - if x <= y  then return 1, else return 0 
@@ -252,19 +270,33 @@ int conditional(int x, int y, int z) {
  *   Rating: 3
  */
 int isLessOrEqual(int x, int y) {
-  return 2;
+	//case 분류
+	//1. y가 양수고 x가 음수면 무조건 x<=y 만족
+	int xsign=(x>>31) & 1;
+	int ysign=(y>>31) & 1;
+	int tmp = xsign ^ ysign;
+	int result=tmp & xsign;
+	int negate= ~x + 1;
+	int sub = (y + negate) >> 31;
+
+	return result | !(sub | tmp);
+
 }
 //4
 /* 
  * logicalNeg - implement the ! operator, using all of 
  *              the legal operators except !
  *   Examples: logicalNeg(3) = 0, logicalNeg(0) = 1
+
  *   Legal ops: ~ & ^ | + << >>
  *   Max ops: 12
  *   Rating: 4 
  */
 int logicalNeg(int x) {
-  return 2;
+	int neg= ~x + 1;    //x를 음수로 바꿈
+	int check= x | neg;    //음수로 바꾼 값이랑 or연산해서 0인지 확인
+	
+	return (check>>31)+1;   //MSB 확인해서 0인지 아닌지 확인
 }
 /* howManyBits - return the minimum number of bits required to represent x in
  *             two's complement
@@ -279,7 +311,31 @@ int logicalNeg(int x) {
  *  Rating: 4
  */
 int howManyBits(int x) {
-  return 0;
+
+
+	int sign,bit0,bit1,bit2,bit4,bit8,bit16;
+
+  	sign=x>>31;
+  	x=x ^ sign;
+
+  	bit16=!!(x>>16)<<4;
+  	x=x>>bit16;
+
+  	bit8=!!(x>>8)<<3;
+  	x=x>>bit8;
+
+  	bit4=!!(x>>4)<<2;
+  	x=x>>bit4;
+
+  	bit2=!!(x>>2)<<1;
+  	x=x>>bit2;
+
+  	bit1=!!(x>>1);
+  	x=x>>bit1;
+
+  	bit0=x;
+
+  	return bit16+bit8+bit4+bit2+bit1+bit0+1;
 }
 //float
 /* 
@@ -294,7 +350,20 @@ int howManyBits(int x) {
  *   Rating: 4
  */
 unsigned floatScale2(unsigned uf) {
+  unsigned int s= uf >> 31;         //31 shift
+  unsigned int exp= (uf >> 23) & 0xFF;  //23bit shift 한 후 8bit만 뽑아냄
+  unsigned int frac= uf & 0x7FFFFF;
+  if(exp==0){
+	  return (s<< 31) | (exp << 23) | (frac << 1);
+  }
+  else if (exp==0xFF){
+	  return uf;
+  }
+  else{
+	  return (s<< 31) | ((exp + 1)<<23) | frac;
+  }
   return 2;
+
 }
 /* 
  * floatFloat2Int - Return bit-level equivalent of expression (int) f
