@@ -350,19 +350,18 @@ int howManyBits(int x) {
  *   Rating: 4
  */
 unsigned floatScale2(unsigned uf) {
-  unsigned int s= uf >> 31;         //31 shift
-  unsigned int exp= (uf >> 23) & 0xFF;  //23bit shift 한 후 8bit만 뽑아냄
-  unsigned int frac= uf & 0x7FFFFF;
-  if(exp==0){
-	  return (s<< 31) | (exp << 23) | (frac << 1);
+  unsigned int s= uf >> 31;         //31 logical right shift(unsigned 이므로)
+  unsigned int exp= (uf >> 23) & 0xFF;  //23bit shift 한 후 8bit만 뽑아냄(1이 set 된 부분만 뽑아냄)
+  unsigned int frac= uf & 0x7FFFFF;     //23bit가 all 1인수 하나 만들고 &하면 set되는 부분만 뽑아낼 수 있음->0xFFFF(16bit) 만들고 앞에 7개의 0을 1로 만들어 23bit 만들기=(0x7FFFFF) 
+  if(exp==0){ //denormalize
+	  return (s<< 31) | (exp << 23) | (frac << 1);     //지수를 조정할 수 없기 때문에 가수부분을 2배로 만듬
   }
-  else if (exp==0xFF){
-	  return uf;
+  else if (exp==0xFF){  //special
+	  return uf;    //그냥 그대로 반환
   }
-  else{
-	  return (s<< 31) | ((exp + 1)<<23) | frac;
+  else{   //normalize
+	  return (s<< 31) | ((exp + 1)<<23) | frac;    //2배니까 지수 부분인 exp에만 1 더해줌, frac은 그대로 사용
   }
-  return 2;
 
 }
 /* 
@@ -378,8 +377,29 @@ unsigned floatScale2(unsigned uf) {
  *   Rating: 4
  */
 int floatFloat2Int(unsigned uf) {
-  return 2;
+   int s= uf >> 31;         //31 logical right shift(unsigned 이므로)
+   int exp= (uf >> 23) & 0xFF;
+   //23bit가 all 1인수 하나 만들고&하면 set되는 부분만 뽑아낼 수 있음
+   //0xFFFF(16bit) 만들고 앞에 7개의0을 1로 만들어 23bit 만들기= (0x7FFFFF)
+   int frac= (uf & 0x7FFFFF) | 0x800000;   //생략된 1 복원
+   if ((exp-127)<0){
+	   return 0;   
+   }
+   if(uf==0)
+	   return 0;
+   if ((exp-127)>=31)
+	   return 0x80000000u;
+   if ((exp-127)>23)
+	   frac <<=(exp-127-23);
+   else
+	   frac>>=(23-(exp-127));
+   if(s)
+	   return -frac;
+   else
+	   return frac;
+
 }
+
 /* 
  * floatPower2 - Return bit-level equivalent of the expression 2.0^x
  *   (2.0 raised to the power x) for any 32-bit integer x.
@@ -394,5 +414,12 @@ int floatFloat2Int(unsigned uf) {
  *   Rating: 4
  */
 unsigned floatPower2(int x) {
-    return 2;
+	int exp=x+127;
+    if(x<-126)
+		return 0;
+	else if(x>127)
+		return 0x7F800000;
+	else
+		return exp<<23;
+	
 }
