@@ -1,8 +1,9 @@
 /*
+ *
  * tsh - A tiny shell program with job control
  *
- * Name: <fill in>
- * Student id: <fill in>
+ * Name: <김준수>
+ * Student id: <2022031994>
  */
 #include <stdio.h>
 #include <stdlib.h>
@@ -159,7 +160,7 @@ int main(int argc, char **argv)
 }
 
 /*
- * eval - Evaluate the command line that the user has just typed in
+ * eval - Evaluate the command line that the user has just typㅑed in
  *
  * If the user has requested a built-in command (quit, jobs, bg or fg)
  * then execute it immediately. Otherwise, fork a child process and
@@ -171,6 +172,35 @@ int main(int argc, char **argv)
  */
 void eval(char *cmdline)
 {
+	int bg, status;
+	pid_t pid;
+	char *argv[MAXARGS];
+	bg=parseline(cmdline,argv);
+	
+	if(argv[0] && !builtin_cmd(argv)){   //builtin command 아닌 경우 실행파일로 인식해서 fork하고 execve() 함수 필요
+		//fork(), execv() 함수 필요
+		if((pid=fork())==0){    //foreground 에서  자식 process가 동작함. 
+			setpgid(0,0);  //pid기준으로 pgid가 setting이 됨. 
+			 //음수니까 실행파일 못찾음
+			if(execve(argv[0], argv, environ)<0){   //myspin 같은 프로그램 실행시키기 위함
+				printf("%s: Command not found\n", argv[0]);
+				exit(0);
+			}
+			
+		}
+		else if(pid>0){      //부모 process(shell 프로그램)
+			//background면 BG, 아니면 FG
+			addjob(jobs,pid,bg ? BG : FG,cmdline);   //jobs라는 커멘드입력됐을 때, 인자들 추가
+			if(bg){
+				printf("[%d] (%d) %s",pid2jid(pid),pid,cmdline);
+			}
+
+			
+			//wait(&status);   //signal_handler 부분에서 reaping해주므로 여기서는 필요없음
+			else
+				waitfg(pid);    //fg동작에서는 기다릴 필요 잇으므로 waitfg로 대기함
+		}
+	}
 	return;
 }
 
@@ -178,7 +208,7 @@ void eval(char *cmdline)
  * parseline - Parse the command line and build the argv array.
  *
  * Characters enclosed in single quotes are treated as a single
- * argument.  Return true if the user has requested a BG job, false if
+ * argument.  Return true if the uSER Has requested a BG job, false if
  * the user has requested a FG job.
  */
 int parseline(const char *cmdline, char **argv)
@@ -237,6 +267,38 @@ int parseline(const char *cmdline, char **argv)
  */
 int builtin_cmd(char **argv)
 {
+
+	
+	if(argv[0]==NULL) //빈 문자인지 확인 (그냥 enter 쳤을 때)
+		return 1;     //builtin command인걸로 처리해줌
+	if(!strcmp(argv[0],"quit")){
+		exit(0);
+	}
+	else if(!strcmp(argv[0], "jobs")){
+		listjobs(jobs);
+		return 1;
+	}
+	
+	else if(!strcmp(argv[0],"fg")){
+		
+		if(argv[1]==NULL){
+			printf("%s command requires PID or %%jobid argument\n",argv[0]);
+			return;
+		}
+		do_bgfg(argv);
+		return 1;
+	}
+	else if(!strcmp(argv[0],"bg")){
+
+		if(argv[1]==NULL){
+			printf("%s command requires PID or %%jobid argument\n",argv[0]);
+			return;
+		}
+		do_bgfg(argv);
+		return 1;
+	}
+	
+
 	return 0;     /* not a builtin command */
 }
 
@@ -244,7 +306,102 @@ int builtin_cmd(char **argv)
  * do_bgfg - Execute the builtin bg and fg commands
  */
 void do_bgfg(char **argv)
-{
+{	
+			
+	int jid=0;
+	int pid=0;
+	struct job_t* job;
+	int idx=1;
+	int flag;
+	int bg;
+	//int fg;
+	int a=strlen(argv[1]);
+
+	/*
+	if(argv[1]==NULL){
+		printf("%s command requires PID or %%jobid argument\n",argv[0]);
+		return;
+	}
+	*/
+
+	if(argv[1][0]=='%'){
+		flag=1;   //% 가 입력되면 jid로 간주
+		
+		for(int i=a-1;i>0;i--){
+	
+			jid += (argv[1][i]-'0')*idx;
+			idx*=10;
+		}
+
+		job=getjobjid(jobs,jid);
+		if(!job){
+			printf("%s: No such job\n", argv[1]);
+			return;
+		}
+
+	}
+	
+
+	else if(isdigit(argv[1][0])){    //그냥 숫자가 오면 pid로 간주
+		flag=0;
+
+		for(int i=a-1;i>=0;i--){
+	
+			pid += (argv[1][i]-'0')*idx;
+			idx*=10;
+		}
+
+		job=getjobpid(jobs,pid);
+		if(!job){
+			printf("(%s): No such process\n", argv[1]);
+			return;
+		}
+	}
+	else{
+
+		printf("%s: argument must be a PID or %%jobid\n", argv[0]);
+		return;
+		
+	}
+	
+	/*
+	if(flag){
+	//	job=getjobjid(jobs,jid);
+
+		job=getjobjid(jobs,jid);
+		if(!job){
+			printf("%s: No such job", argv[1]);
+			return;
+		}
+	}
+	else{
+	//	job=getjobpid(jobs,pid);
+
+
+		job=getjobpid(jobs,pid);
+		if(!job){
+			printf("(%s): No such process", argv[1]);
+			return;
+		}
+	}
+	*/
+	
+	
+	bg=!strcmp(argv[0],"bg");
+	if(bg){
+		job->state=BG;
+		printf("[%d] (%d) %s",job->jid,job->pid,job->cmdline);
+		kill(-(job->pid), SIGCONT);
+	}
+	else{
+		job->state=FG;
+
+		kill(-(job->pid), SIGCONT);
+
+		waitfg(job->pid);
+	}
+	
+	
 	return;
 }
 
@@ -253,6 +410,11 @@ void do_bgfg(char **argv)
  */
 void waitfg(pid_t pid)
 {
+	struct job_t* job=getjobpid(jobs,pid);
+	if(job){
+		while(job->pid==pid && job->state==FG)
+			sleep(1);
+	}
 	return;
 }
 
@@ -269,6 +431,33 @@ void waitfg(pid_t pid)
  */
 void sigchld_handler(int sig)
 {
+	int status;
+	pid_t pid;
+	struct job_t* job;
+	//waitpid가 return 하는 값이 pid에 적히는데 이게 양수인 경우에만 반복문에 남아있음
+	//그렇지 않은 경우는 핸들러부터 return해서 shell 원래 기능 할 수 있도록 나타냄
+	while((pid=waitpid(-1,&status,WNOHANG|WUNTRACED))>0){    //waitpid에서 return을 해야하는데 waitpid에서 멈춰있음
+		//job=getjobpid(jobs,pid);
+		if(WIFEXITED(status)){     //정상 종료되었을 때 1 return, deletejob 해줘야함
+			deletejob(jobs,pid);
+		}
+		
+		else if(WIFSTOPPED(status)){
+
+			job=getjobpid(jobs,pid);
+			if(job){
+				job->state=ST;
+				fprintf(stderr,"Job [%d] (%d) stopped by signal %d\n",pid2jid(pid),pid,WSTOPSIG(status));
+			}
+		}
+		else if(WIFSIGNALED(status)){
+			
+			fprintf(stderr, "Job [%d] (%d) terminated by signal %d\n",pid2jid(pid),pid,WTERMSIG(status));
+			
+			deletejob(jobs,pid);
+		}
+	}	
+
 	return;
 }
 
@@ -279,6 +468,10 @@ void sigchld_handler(int sig)
  */
 void sigint_handler(int sig)
 {
+	int status;
+	pid_t pid=fgpid(jobs);
+	if(pid>0)
+		kill(-pid,SIGINT);
 	return;
 }
 
@@ -289,6 +482,13 @@ void sigint_handler(int sig)
  */
 void sigtstp_handler(int sig)
 {
+	int status;
+	pid_t pid=fgpid(jobs);
+
+	//fprintf(stderr,"Job [%d] (%d) stopped by signal %d\n",pid2jid(pid),pid,WSTOPSIG(status));
+	if(pid>0)
+		kill(-pid,SIGTSTP);
+	
 	return;
 }
 
